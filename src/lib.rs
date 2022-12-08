@@ -6,19 +6,23 @@
 //! [vibrant-js]: https://github.com/jariz/vibrant.js
 //! [color_quant]: https://github.com/PistonDevelopers/color_quant
 
+
+
 #![cfg_attr(feature = "dev", feature(plugin))]
 #![cfg_attr(feature = "dev", plugin(clippy))]
+
 
 #![deny(missing_docs)]
 
 extern crate image;
-extern crate color_quant;
-extern crate itertools;
-extern crate hsl;
 
 mod settings;
 mod palette;
 mod vibrant;
+mod utils;
 
-pub use vibrant::Vibrancy;
-pub use palette::Palette;
+// When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
+// allocator.
+#[cfg(feature = "wee_alloc")]
+#[global_allocator]
+static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
