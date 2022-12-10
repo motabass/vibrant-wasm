@@ -1,10 +1,9 @@
-use std::fmt;
 use std::collections::BTreeMap;
+use std::fmt;
 
-use itertools::Itertools;
-use image::{GenericImage, Pixel, Rgb, Rgba};
 use color_quant::NeuQuant;
-
+use image::{GenericImage, Pixel, Rgb, Rgba};
+use itertools::Itertools;
 
 /// Palette of colors.
 #[derive(Debug, Hash, PartialEq, Eq, Default)]
@@ -16,7 +15,6 @@ pub struct Palette {
     pub pixel_counts: BTreeMap<usize, usize>,
 }
 
-
 impl Palette {
     /// Create a new palett from an image
     ///
@@ -25,10 +23,12 @@ impl Palette {
     ///
     /// [color_quant]: https://github.com/PistonDevelopers/color_quant
     pub fn new<P, G>(image: &G, color_count: usize, quality: i32) -> Palette
-        where P: Sized + Pixel<Subpixel=u8>,
-              G: Sized + GenericImage<Pixel=P>
+    where
+        P: Sized + Pixel<Subpixel = u8>,
+        G: Sized + GenericImage<Pixel = P>,
     {
-        let pixels: Vec<Rgba<u8>> = image.pixels()
+        let pixels: Vec<Rgba<u8>> = image
+            .pixels()
             .map(|(_, _, pixel)| pixel.to_rgba())
             .collect();
 
@@ -45,15 +45,16 @@ impl Palette {
 
         let quant = NeuQuant::new(quality, color_count, &flat_pixels);
 
-        let pixel_counts = pixels.iter()
+        let pixel_counts = pixels
+            .iter()
             .map(|rgba| quant.index_of(&rgba.channels()))
-            .fold(BTreeMap::new(),
-                  |mut acc, pixel| {
-                      *acc.entry(pixel).or_insert(0) += 1;
-                      acc
-                  });
+            .fold(BTreeMap::new(), |mut acc, pixel| {
+                *acc.entry(pixel).or_insert(0) += 1;
+                acc
+            });
 
-        let palette: Vec<Rgb<u8>> = quant.color_map_rgba()
+        let palette: Vec<Rgb<u8>> = quant
+            .color_map_rgba()
             .iter()
             .chunks(4)
             .into_iter()
@@ -71,7 +72,10 @@ impl Palette {
     }
 
     fn frequency_of(&self, color: &Rgb<u8>) -> usize {
-        let index = self.palette.iter().position(|x| x.channels() == color.channels());
+        let index = self
+            .palette
+            .iter()
+            .position(|x| x.channels() == color.channels());
         if let Some(index) = index {
             *self.pixel_counts.get(&index).unwrap_or(&0)
         } else {
@@ -105,7 +109,8 @@ fn is_boring_pixel(pixel: &Rgba<u8>) -> bool {
 
 impl fmt::Display for Palette {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let color_list = self.palette
+        let color_list = self
+            .palette
             .iter()
             .map(|rgb| format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]))
             .join(", ");

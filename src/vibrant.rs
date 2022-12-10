@@ -1,100 +1,52 @@
 use std::collections::BTreeMap;
-use std::convert::TryInto;
 use std::fmt;
 
 use image::{GenericImage, Pixel, Rgb};
 
-use hsl::HSL;
-use serde::{Deserialize, Serialize};
-use wasm_bindgen::prelude::*;
-
 use crate::palette::Palette;
 use crate::settings;
-use crate::utils::*;
-
-// A macro to provide `println!(..)`-style syntax for `console.log` logging.
-// macro_rules! log {
-//     ( $( $t:tt )* ) => {
-//         web_sys::console::log_1(&format!( $( $t )* ).into());
-//     }
-// }
-
-
-#[derive(Serialize, Deserialize)]
-pub struct ColorPalette {
-    primary: [u8; 3],
-    dark: [u8; 3],
-    light: [u8; 3],
-    muted: [u8; 3],
-    dark_muted: [u8; 3],
-    light_muted: [u8; 3],
-}
-
-#[wasm_bindgen]
-pub fn get_palette_from_byte_array(image_bytes: &[u8]) -> JsValue {
-
-    // set_panic_hook();
-
-
-    // log!("Got bytes from JS");
-
-    let image = image::load_from_memory(image_bytes).ok().expect("Could not load image!");
-
-    // log!("Made image from bytes");
-
-    let vibrancy = Vibrancy::new(&image);
-
-    // log!("Generated colors");
-    // log!("{}", vibrancy);
-
-
-    let palette = ColorPalette {
-        primary: vibrancy.primary.unwrap_or(Rgb([0, 0, 0])).channels().try_into().expect("Zu viele Farben für RGB"),
-        dark: vibrancy.dark.unwrap_or(Rgb([0, 0, 0])).channels().try_into().expect("Zu viele Farben für RGB"),
-        light: vibrancy.light.unwrap_or(Rgb([0, 0, 0])).channels().try_into().expect("Zu viele Farben für RGB"),
-        muted: vibrancy.muted.unwrap_or(Rgb([0, 0, 0])).channels().try_into().expect("Zu viele Farben für RGB"),
-        dark_muted: vibrancy.dark_muted.unwrap_or(Rgb([0, 0, 0])).channels().try_into().expect("Zu viele Farben für RGB"),
-        light_muted: vibrancy.light_muted.unwrap_or(Rgb([0, 0, 0])).channels().try_into().expect("Zu viele Farben für RGB"),
-    };
-    serde_wasm_bindgen::to_value(&palette).expect("Konnte wert nicht zu JS senden")
-}
-
+use hsl::HSL;
 
 /// Vibrancy
 ///
 /// 6 vibrant colors: primary, dark, light, dark muted and light muted.
 #[derive(Debug, Hash, PartialEq, Eq, Default)]
 pub struct Vibrancy {
-    primary: Option<Rgb<u8>>,
-    dark: Option<Rgb<u8>>,
-    light: Option<Rgb<u8>>,
-    muted: Option<Rgb<u8>>,
-    dark_muted: Option<Rgb<u8>>,
-    light_muted: Option<Rgb<u8>>,
+    pub primary: Option<Rgb<u8>>,
+    pub dark: Option<Rgb<u8>>,
+    pub light: Option<Rgb<u8>>,
+    pub muted: Option<Rgb<u8>>,
+    pub dark_muted: Option<Rgb<u8>>,
+    pub light_muted: Option<Rgb<u8>>,
 }
-
 
 impl Vibrancy {
     /// Create new vibrancy map from an image
     pub fn new<P, G>(image: &G) -> Vibrancy
-        where P: Sized + Pixel<Subpixel=u8>,
-              G: Sized + GenericImage<Pixel=P>
+    where
+        P: Sized + Pixel<Subpixel = u8>,
+        G: Sized + GenericImage<Pixel = P>,
     {
         generate_varation_colors(&Palette::new(image, 256, 10))
     }
 
     fn color_already_set(&self, color: &Rgb<u8>) -> bool {
         let color = Some(*color);
-        self.primary == color || self.dark == color || self.light == color ||
-            self.muted == color || self.dark_muted == color || self.light_muted == color
+        self.primary == color
+            || self.dark == color
+            || self.light == color
+            || self.muted == color
+            || self.dark_muted == color
+            || self.light_muted == color
     }
 
-    fn find_color_variation(&self,
-                            palette: &[Rgb<u8>],
-                            pixel_counts: &BTreeMap<usize, usize>,
-                            luma: &MTM<f64>,
-                            saturation: &MTM<f64>)
-                            -> Option<Rgb<u8>> {
+    fn find_color_variation(
+        &self,
+        palette: &[Rgb<u8>],
+        pixel_counts: &BTreeMap<usize, usize>,
+        luma: &MTM<f64>,
+        saturation: &MTM<f64>,
+    ) -> Option<Rgb<u8>> {
         let mut max = None;
         let mut max_value = 0_f64;
 
@@ -103,18 +55,24 @@ impl Vibrancy {
         for (index, swatch) in palette.iter().enumerate() {
             let HSL { h: _, s, l } = HSL::from_rgb(swatch.channels());
 
-            if s >= saturation.min && s <= saturation.max && l >= luma.min && l <= luma.max &&
-                !self.color_already_set(swatch) {
+            if s >= saturation.min
+                && s <= saturation.max
+                && l >= luma.min
+                && l <= luma.max
+                && !self.color_already_set(swatch)
+            {
                 let population = *pixel_counts.get(&index).unwrap_or(&0) as f64;
                 if population == 0_f64 {
                     continue;
                 }
-                let value = create_comparison_value(s,
-                                                    saturation.target,
-                                                    l,
-                                                    luma.target,
-                                                    population,
-                                                    complete_population as f64);
+                let value = create_comparison_value(
+                    s,
+                    saturation.target,
+                    l,
+                    luma.target,
+                    population,
+                    complete_population as f64,
+                );
                 if max.is_none() || value > max_value {
                     max = Some(swatch.clone());
                     max_value = value;
@@ -142,21 +100,20 @@ impl fmt::Display for Vibrancy {
         write!(f, "Vibrant Colors {{\n")?;
 
         macro_rules! display_color {
-            ($formatter:expr, $name:expr, $color:expr) => {
-                {
-                    write!($formatter, "\t")?;
-                    write!($formatter, $name)?;
-                    if let Some(c) = $color {
-                        let rgb = c.channels();
-                       write!($formatter,
-                            " Color: #{:02X}{:02X}{:02X}\n",
-                            rgb[0], rgb[1], rgb[2]
-                        )?;
-                    } else {
-                       write!($formatter, " Color: None\n")?;
-                    }
+            ($formatter:expr, $name:expr, $color:expr) => {{
+                write!($formatter, "\t")?;
+                write!($formatter, $name)?;
+                if let Some(c) = $color {
+                    let rgb = c.channels();
+                    write!(
+                        $formatter,
+                        " Color: #{:02X}{:02X}{:02X}\n",
+                        rgb[0], rgb[1], rgb[2]
+                    )?;
+                } else {
+                    write!($formatter, " Color: None\n")?;
                 }
-            };
+            }};
         }
 
         display_color!(f, "Primary Vibrant", self.primary);
@@ -172,84 +129,95 @@ impl fmt::Display for Vibrancy {
 
 fn generate_varation_colors(p: &Palette) -> Vibrancy {
     let mut vibrancy = Vibrancy::default();
-    vibrancy.primary =
-        vibrancy.find_color_variation(&p.palette,
-                                      &p.pixel_counts,
-                                      &MTM {
-                                          min: settings::MIN_NORMAL_LUMA,
-                                          target: settings::TARGET_NORMAL_LUMA,
-                                          max: settings::MAX_NORMAL_LUMA,
-                                      },
-                                      &MTM {
-                                          min: settings::MIN_VIBRANT_SATURATION,
-                                          target: settings::TARGET_VIBRANT_SATURATION,
-                                          max: 1_f64,
-                                      });
+    vibrancy.primary = vibrancy.find_color_variation(
+        &p.palette,
+        &p.pixel_counts,
+        &MTM {
+            min: settings::MIN_NORMAL_LUMA,
+            target: settings::TARGET_NORMAL_LUMA,
+            max: settings::MAX_NORMAL_LUMA,
+        },
+        &MTM {
+            min: settings::MIN_VIBRANT_SATURATION,
+            target: settings::TARGET_VIBRANT_SATURATION,
+            max: 1_f64,
+        },
+    );
 
-    vibrancy.light = vibrancy.find_color_variation(&p.palette,
-                                                   &p.pixel_counts,
-                                                   &MTM {
-                                                       min: settings::MIN_LIGHT_LUMA,
-                                                       target: settings::TARGET_LIGHT_LUMA,
-                                                       max: 1_f64,
-                                                   },
-                                                   &MTM {
-                                                       min: settings::MIN_VIBRANT_SATURATION,
-                                                       target: settings::TARGET_VIBRANT_SATURATION,
-                                                       max: 1_f64,
-                                                   });
+    vibrancy.light = vibrancy.find_color_variation(
+        &p.palette,
+        &p.pixel_counts,
+        &MTM {
+            min: settings::MIN_LIGHT_LUMA,
+            target: settings::TARGET_LIGHT_LUMA,
+            max: 1_f64,
+        },
+        &MTM {
+            min: settings::MIN_VIBRANT_SATURATION,
+            target: settings::TARGET_VIBRANT_SATURATION,
+            max: 1_f64,
+        },
+    );
 
-    vibrancy.dark = vibrancy.find_color_variation(&p.palette,
-                                                  &p.pixel_counts,
-                                                  &MTM {
-                                                      min: 0_f64,
-                                                      target: settings::TARGET_DARK_LUMA,
-                                                      max: settings::MAX_DARK_LUMA,
-                                                  },
-                                                  &MTM {
-                                                      min: settings::MIN_VIBRANT_SATURATION,
-                                                      target: settings::TARGET_VIBRANT_SATURATION,
-                                                      max: 1_f64,
-                                                  });
+    vibrancy.dark = vibrancy.find_color_variation(
+        &p.palette,
+        &p.pixel_counts,
+        &MTM {
+            min: 0_f64,
+            target: settings::TARGET_DARK_LUMA,
+            max: settings::MAX_DARK_LUMA,
+        },
+        &MTM {
+            min: settings::MIN_VIBRANT_SATURATION,
+            target: settings::TARGET_VIBRANT_SATURATION,
+            max: 1_f64,
+        },
+    );
 
-    vibrancy.muted = vibrancy.find_color_variation(&p.palette,
-                                                   &p.pixel_counts,
-                                                   &MTM {
-                                                       min: settings::MIN_NORMAL_LUMA,
-                                                       target: settings::TARGET_NORMAL_LUMA,
-                                                       max: settings::MAX_NORMAL_LUMA,
-                                                   },
-                                                   &MTM {
-                                                       min: 0_f64,
-                                                       target: settings::TARGET_MUTED_SATURATION,
-                                                       max: settings::MAX_MUTED_SATURATION,
-                                                   });
+    vibrancy.muted = vibrancy.find_color_variation(
+        &p.palette,
+        &p.pixel_counts,
+        &MTM {
+            min: settings::MIN_NORMAL_LUMA,
+            target: settings::TARGET_NORMAL_LUMA,
+            max: settings::MAX_NORMAL_LUMA,
+        },
+        &MTM {
+            min: 0_f64,
+            target: settings::TARGET_MUTED_SATURATION,
+            max: settings::MAX_MUTED_SATURATION,
+        },
+    );
 
-    vibrancy.light_muted = vibrancy.find_color_variation(&p.palette,
-                                                         &p.pixel_counts,
-                                                         &MTM {
-                                                             min: settings::MIN_LIGHT_LUMA,
-                                                             target: settings::TARGET_LIGHT_LUMA,
-                                                             max: 1_f64,
-                                                         },
-                                                         &MTM {
-                                                             min: 0_f64,
-                                                             target: settings::TARGET_MUTED_SATURATION,
-                                                             max: settings::MAX_MUTED_SATURATION,
-                                                         });
+    vibrancy.light_muted = vibrancy.find_color_variation(
+        &p.palette,
+        &p.pixel_counts,
+        &MTM {
+            min: settings::MIN_LIGHT_LUMA,
+            target: settings::TARGET_LIGHT_LUMA,
+            max: 1_f64,
+        },
+        &MTM {
+            min: 0_f64,
+            target: settings::TARGET_MUTED_SATURATION,
+            max: settings::MAX_MUTED_SATURATION,
+        },
+    );
 
-    vibrancy.dark_muted = vibrancy.find_color_variation(&p.palette,
-                                                        &p.pixel_counts,
-                                                        &MTM {
-                                                            min: 0_f64,
-                                                            target: settings::TARGET_DARK_LUMA,
-                                                            max: settings::MAX_DARK_LUMA,
-                                                        },
-                                                        &MTM {
-                                                            min: 0_f64,
-                                                            target: settings::TARGET_MUTED_SATURATION,
-                                                            max: settings::MAX_MUTED_SATURATION,
-                                                        });
+    vibrancy.dark_muted = vibrancy.find_color_variation(
+        &p.palette,
+        &p.pixel_counts,
+        &MTM {
+            min: 0_f64,
+            target: settings::TARGET_DARK_LUMA,
+            max: settings::MAX_DARK_LUMA,
+        },
+        &MTM {
+            min: 0_f64,
+            target: settings::TARGET_MUTED_SATURATION,
+            max: settings::MAX_MUTED_SATURATION,
+        },
+    );
 
     vibrancy
 }
@@ -259,26 +227,28 @@ fn invert_diff(val: f64, target_val: f64) -> f64 {
 }
 
 fn weighted_mean(vals: &[(f64, f64)]) -> f64 {
-    let (sum, sum_weight) = vals.iter().fold((0_f64, 0_f64),
-                                             |(sum, sum_weight), &(val, weight)| {
-                                                 (sum + val * weight, sum_weight + weight)
-                                             });
+    let (sum, sum_weight) = vals
+        .iter()
+        .fold((0_f64, 0_f64), |(sum, sum_weight), &(val, weight)| {
+            (sum + val * weight, sum_weight + weight)
+        });
 
     sum / sum_weight
 }
 
-fn create_comparison_value(sat: f64,
-                           target_sat: f64,
-                           luma: f64,
-                           target_uma: f64,
-                           population: f64,
-                           max_population: f64)
-                           -> f64 {
-    weighted_mean(&[(invert_diff(sat, target_sat),
-                     settings::WEIGHT_SATURATION),
+fn create_comparison_value(
+    sat: f64,
+    target_sat: f64,
+    luma: f64,
+    target_uma: f64,
+    population: f64,
+    max_population: f64,
+) -> f64 {
+    weighted_mean(&[
+        (invert_diff(sat, target_sat), settings::WEIGHT_SATURATION),
         (invert_diff(luma, target_uma), settings::WEIGHT_LUMA),
-        (population / max_population,
-         settings::WEIGHT_POPULATION)])
+        (population / max_population, settings::WEIGHT_POPULATION),
+    ])
 }
 
 /// Minimum, Maximum, Target

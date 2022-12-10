@@ -22,4 +22,5 @@ $RECYCLE.BIN/
 .directory
 
 .idea
+!.idea/.run
 pkg
